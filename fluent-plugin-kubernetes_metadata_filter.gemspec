@@ -10,8 +10,13 @@ Gem::Specification.new do |spec|
   spec.email = ['team-logging@redhat.com', 'jimmidyson@gmail.com']
   spec.description = 'Filter plugin to add Kubernetes metadata'
   spec.summary = 'Fluentd filter plugin to add Kubernetes metadata'
-  spec.homepage = 'https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter'
+  spec.homepage = 'https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter'
   spec.license = 'Apache-2.0'
+
+  spec.metadata = {
+    'bug_tracker_uri' => 'https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter/issues',
+    'source_code_uri' => 'https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter'
+  }
 
   gemspec = File.basename(__FILE__)
   spec.files = IO.popen(['git', 'ls-files', '-z'], chdir: __dir__, err: IO::NULL) do |ls|
