@@ -7,34 +7,34 @@ on:
       - 'Rakefile'
       - 'fluent-plugin-kubernetes_metadata_filter.gemspec'
       - '**/*.rb'
+  schedule:
+    - cron: '0 0 1 * *'
 permissions:
   contents: read
 jobs:
+  ruby-versions:
+    uses: ruby/actions/.github/workflows/ruby_versions.yml@master
+    with:
+      engine: cruby
+      min_version: 2.7
   test:
+    needs: ruby-versions
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        ruby-version:
-          - '2.7'
-          - '3.0'
-          - '3.1'
-          - '3.2'
-          - '3.3'
-          - '3.4'
-          - '4.0'
-          - 'ruby-head'
+        ruby: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Ruby
         uses: ruby/setup-ruby@6ca151fd1bfcfd6fe0c4eb6837eb0584d0134a0c # v1.290.0
         with:
-          ruby-version: ${{ matrix.ruby-version }}
+          ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
       - name: Run tests
         run: bundle exec rake test
       - name: Upload coverage results
-        if: matrix.ruby-version == '2.7'
+        if: matrix.ruby == '2.7'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage
