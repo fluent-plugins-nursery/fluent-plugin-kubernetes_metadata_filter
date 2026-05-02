@@ -47,6 +47,7 @@ module KubernetesMetadata
         @stats.bump(:namespace_watch_gone_errors)
         log.info('410 Gone encountered. Restarting namespace watch to reset resource versions.', e)
         namespace_watcher = nil
+        sleep 1
       rescue KubeException => e
         if e.error_code == 401
           # recreate client to refresh token
