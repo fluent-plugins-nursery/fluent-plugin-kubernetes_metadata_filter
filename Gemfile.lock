@@ -179,4 +179,3 @@ DEPENDENCIES
   test-unit
   vcr
   webmock
-  yajl-ruby
