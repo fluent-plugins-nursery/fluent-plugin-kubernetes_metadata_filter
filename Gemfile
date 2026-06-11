@@ -15,7 +15,6 @@ gem 'rubocop-rake'
 gem 'test-unit'
 gem 'vcr'
 gem 'webmock'
-gem 'yajl-ruby'
 
 # Specify your gem's dependencies in fluent-plugin-add.gemspec
 gemspec
