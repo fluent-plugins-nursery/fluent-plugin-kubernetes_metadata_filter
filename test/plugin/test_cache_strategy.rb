@@ -46,7 +46,7 @@ class KubernetesMetadataCacheStrategyMock
   def log
     logger = {}
 
-    def logger.on_trace
+    def logger.on_trace # rubocop:disable Naming/PredicateMethod
       true
     end
 
