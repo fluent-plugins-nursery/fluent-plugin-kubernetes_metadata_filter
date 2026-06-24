@@ -117,8 +117,8 @@ class TestFilterKubernetesMetadata < Minitest::Spec
           expected_cert_path = File.join(dir, Plugin::KubernetesMetadataFilter::K8_POD_CA_CERT)
           expected_token_path = File.join(dir, Plugin::KubernetesMetadataFilter::K8_POD_TOKEN)
 
-          File.open(expected_cert_path, 'w')
-          File.open(expected_token_path, 'w')
+          FileUtils.touch(expected_cert_path)
+          FileUtils.touch(expected_token_path)
 
           d = create_driver("
             watch false
