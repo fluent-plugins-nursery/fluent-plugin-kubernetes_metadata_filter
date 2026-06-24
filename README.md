@@ -1,8 +1,6 @@
 # fluent-plugin-kubernetes_metadata_filter, a plugin for [Fluentd](http://fluentd.org)
-[![Test](https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter/actions/workflows/test.yml/badge.svg)](https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter/actions?query=workflow%3Atest)
-[![Lint](https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter/actions/workflows/lint.yml/badge.svg)](https://github.com/fabric8io/fluent-plugin-kubernetes_metadata_filter/actions?query=workflow%3Alint)
-[![Code Climate](https://codeclimate.com/github/fabric8io/fluent-plugin-kubernetes_metadata_filter/badges/gpa.svg)](https://codeclimate.com/github/fabric8io/fluent-plugin-kubernetes_metadata_filter)
-[![Test Coverage](https://codeclimate.com/github/fabric8io/fluent-plugin-kubernetes_metadata_filter/badges/coverage.svg)](https://codeclimate.com/github/fabric8io/fluent-plugin-kubernetes_metadata_filter)
+[![Test](https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter/actions/workflows/test.yml/badge.svg)](https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter/actions/workflows/test.yml)
+[![Lint](https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter/actions/workflows/lint.yml/badge.svg)](https://github.com/fluent-plugins-nursery/fluent-plugin-kubernetes_metadata_filter/actions/workflows/lint.yml)
 [![Ruby Style Guide](https://img.shields.io/badge/code_style-rubocop-brightgreen.svg)](https://github.com/rubocop-hq/rubocop)
 [![Ruby Style Guide](https://img.shields.io/badge/code_style-community-brightgreen.svg)](https://rubystyle.guide)
 
