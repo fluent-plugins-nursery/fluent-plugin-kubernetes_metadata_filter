@@ -19,22 +19,3 @@ Rake::TestTask.new(:base_test) do |task|
   task.pattern = 'test/**/test_*.rb'
   task.warning = false
 end
-
-desc 'Add copyright headers'
-task :headers do
-  require 'rubygems'
-  require 'copyright_header'
-
-  args = {
-    license: 'Apache-2.0',
-    copyright_software: 'Fluentd Kubernetes Metadata Filter Plugin',
-    copyright_software_description: 'Enrich Fluentd events with Kubernetes metadata',
-    copyright_holders: ['Red Hat, Inc.'],
-    copyright_years: ['2015-2021'],
-    add_path: 'lib:test',
-    output_dir: '.'
-  }
-
-  command_line = CopyrightHeader::CommandLine.new(args)
-  command_line.execute
-end
