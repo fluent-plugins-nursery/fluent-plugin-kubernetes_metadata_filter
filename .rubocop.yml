@@ -4,7 +4,7 @@ require:
   - rubocop-rake
 
 AllCops:
-  TargetRubyVersion: 2.7 # keep in sync with .circleci/config.yml and gemspec
+  TargetRubyVersion: 3.2 # keep in sync with .github/workflows/test.yml and gemspec
   NewCops: enable
 
 Gemspec/RequireMFA:

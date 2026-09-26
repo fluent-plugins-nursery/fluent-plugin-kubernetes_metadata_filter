@@ -16,7 +16,7 @@ jobs:
     uses: ruby/actions/.github/workflows/ruby_versions.yml@master
     with:
       engine: cruby
-      min_version: 2.7
+      min_version: '3.2'
   test:
     needs: ruby-versions
     runs-on: ubuntu-latest
@@ -34,7 +34,7 @@ jobs:
       - name: Run tests
         run: bundle exec rake test
       - name: Upload coverage results
-        if: matrix.ruby == '2.7'
+        if: matrix.ruby == '3.2'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage
