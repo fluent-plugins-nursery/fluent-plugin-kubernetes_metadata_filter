@@ -48,6 +48,7 @@ module KubernetesMetadata
         @stats.bump(:pod_watch_gone_errors)
         log.info('410 Gone encountered. Restarting pod watch to reset resource versions.', e)
         pod_watcher = nil
+        sleep 1
       rescue KubeException => e
         if e.error_code == 401
           # recreate client to refresh token
