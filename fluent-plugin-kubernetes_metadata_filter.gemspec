@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
 
   spec.required_ruby_version = '>= 3.2.0'
 
-  spec.add_dependency 'fluentd', ['>= 0.14.0', '< 1.20']
+  spec.add_dependency 'fluentd', ['>= 0.14.0', '< 1.21']
   spec.add_dependency 'kubeclient', ['>= 4.0.0', '< 5.0.0']
   spec.add_dependency 'sin_lru_redux', '~> 2.5'
 end
