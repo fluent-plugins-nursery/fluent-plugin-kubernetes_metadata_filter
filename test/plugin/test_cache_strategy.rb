@@ -115,6 +115,33 @@ class TestCacheStrategy < Minitest::Spec
     end
   end
 
+  it 'when the first pod lookup failed and a later one succeeds' do
+    # a transient API error on the first lookup must not make every later
+    # record of the container fetch the pod again
+    exp = @pod_meta.merge(@namespace_meta)
+    exp.delete('creation_timestamp')
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      @strategy.cache[@pod_uuid] = @pod_meta
+    end
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, @namespace_meta) do
+        assert_equal({ 'pod_id' => @cache_key, 'namespace_id' => @namespace_uuid },
+                     @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+        3.times do
+          assert_equal(exp, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+        end
+      end
+    end
+
+    assert_equal(2, calls)
+    assert_equal(@pod_uuid, @strategy.id_cache[@cache_key][:pod_id])
+  end
+
   it 'when metadata is not cached and pod is deleted and namespace is for a different namespace with the same name' do
     # this is the case for a record from a deleted pod from a deleted namespace
     # where new namespace was created with the same name

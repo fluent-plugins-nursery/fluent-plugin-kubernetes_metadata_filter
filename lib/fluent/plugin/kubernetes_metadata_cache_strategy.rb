@@ -84,7 +84,15 @@ module KubernetesMetadata
         metadata = @cache.fetch(ids[:pod_id]) do
           @stats.bump(:pod_cache_miss)
           m = fetch_pod_metadata(namespace_name, pod_name)
-          m.nil? || m.empty? ? { 'pod_id' => ids[:pod_id] } : m
+          if m.nil? || m.empty?
+            { 'pod_id' => ids[:pod_id] }
+          else
+            # fetch_pod_metadata caches the pod under its UID. Point the
+            # container to it, as the pod may not have been found when
+            # the ids were cached, so later records hit the cache.
+            @id_cache[key] = ids.merge(pod_id: m['pod_id']) if m['pod_id'] && m['pod_id'] != ids[:pod_id]
+            m
+          end
         end
         namespace_metadata = @namespace_cache.fetch(ids[:namespace_id]) do
           m = unless @skip_namespace_metadata
