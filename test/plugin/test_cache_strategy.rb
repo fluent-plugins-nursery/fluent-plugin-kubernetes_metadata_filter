@@ -142,6 +142,75 @@ class TestCacheStrategy < Minitest::Spec
     assert_equal(@pod_uuid, @strategy.id_cache[@cache_key][:pod_id])
   end
 
+  it 'when the pod UID was found earlier and a later lookup finds another pod with the same name' do
+    # a replaced pod or a stale API server answer is not the pod of this container
+    other_meta = { 'pod_id' => 'other_pod_uuid', 'labels' => { 'meta' => 'other' } }
+    exp = other_meta.merge(@namespace_meta)
+    exp.delete('creation_timestamp')
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      other_meta
+    end
+    @strategy.id_cache[@cache_key] = { pod_id: @pod_uuid, namespace_id: @namespace_uuid }
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      2.times do
+        assert_equal(exp, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+      end
+    end
+
+    assert_equal(2, calls)
+    assert_equal({ pod_id: @pod_uuid, namespace_id: @namespace_uuid }, @strategy.id_cache[@cache_key])
+  end
+
+  it 'when the key is the pod UID and a later lookup finds another pod with the same name' do
+    # with /var/log/pods tags the key is the UID of the pod that wrote the log
+    other_meta = { 'pod_id' => 'other_pod_uuid', 'labels' => { 'meta' => 'other' } }
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      other_meta
+    end
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, @namespace_meta) do
+        assert_equal({ 'pod_id' => @pod_uuid, 'namespace_id' => @namespace_uuid },
+                     @strategy.get_pod_metadata(@pod_uuid, 'namespace', 'pod', @time, {}, key_is_pod_id: true))
+        2.times do
+          @strategy.get_pod_metadata(@pod_uuid, 'namespace', 'pod', @time, {}, key_is_pod_id: true)
+        end
+      end
+    end
+
+    assert_equal(3, calls)
+    assert_equal({ pod_id: @pod_uuid, namespace_id: @namespace_uuid }, @strategy.id_cache[@pod_uuid])
+  end
+
+  it 'when the record is older than the namespace and a later lookup finds the pod' do
+    # the pod belongs to a namespace that was recreated with the same name
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      @strategy.cache[@pod_uuid] = @pod_meta
+    end
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, @namespace_meta) do
+        assert_equal({ 'namespace_id' => @namespace_uuid },
+                     @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time - 86_400, {}))
+        @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time - 86_400, {})
+      end
+    end
+
+    assert_equal(2, calls)
+    assert_equal({ pod_id: nil, namespace_id: @namespace_uuid }, @strategy.id_cache[@cache_key])
+  end
+
   it 'when metadata is not cached and pod is deleted and namespace is for a different namespace with the same name' do
     # this is the case for a record from a deleted pod from a deleted namespace
     # where new namespace was created with the same name

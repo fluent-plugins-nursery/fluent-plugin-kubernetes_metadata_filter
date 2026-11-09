@@ -21,7 +21,7 @@
 
 module KubernetesMetadata
   module CacheStrategy
-    def get_pod_metadata(key, namespace_name, pod_name, time, batch_miss_cache) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
+    def get_pod_metadata(key, namespace_name, pod_name, time, batch_miss_cache, key_is_pod_id: false) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity
       metadata = {}
       ids = @id_cache[key]
       if ids.nil?
@@ -50,6 +50,9 @@ module KubernetesMetadata
             if ns_time <= Time.at(time.to_f) # rubocop:disable Metrics/BlockNesting
               # namespace is older then record for pod
               ids[:pod_id] = key
+              # the key stands in for the pod UID, which is still unknown
+              # when it is a container ID
+              ids[:pod_id_unknown] = true unless key_is_pod_id # rubocop:disable Metrics/BlockNesting
               metadata = @cache.fetch(ids[:pod_id]) do
                 { 'pod_id' => ids[:pod_id] }
               end
@@ -84,15 +87,12 @@ module KubernetesMetadata
         metadata = @cache.fetch(ids[:pod_id]) do
           @stats.bump(:pod_cache_miss)
           m = fetch_pod_metadata(namespace_name, pod_name)
-          if m.nil? || m.empty?
-            { 'pod_id' => ids[:pod_id] }
-          else
-            # fetch_pod_metadata caches the pod under its UID. Point the
-            # container to it, as the pod may not have been found when
-            # the ids were cached, so later records hit the cache.
-            @id_cache[key] = ids.merge(pod_id: m['pod_id']) if m['pod_id'] && m['pod_id'] != ids[:pod_id]
-            m
-          end
+          m.nil? || m.empty? ? { 'pod_id' => ids[:pod_id] } : m
+        end
+        if ids[:pod_id_unknown] && metadata['pod_id'] && metadata['pod_id'] != ids[:pod_id]
+          # fetch_pod_metadata caches the pod under its UID. Point the
+          # container to it, so later records hit the cache.
+          @id_cache[key] = ids.except(:pod_id_unknown).merge(pod_id: metadata['pod_id'])
         end
         namespace_metadata = @namespace_cache.fetch(ids[:namespace_id]) do
           m = unless @skip_namespace_metadata

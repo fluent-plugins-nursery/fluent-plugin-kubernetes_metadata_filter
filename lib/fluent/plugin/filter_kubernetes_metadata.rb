@@ -335,7 +335,8 @@ module Fluent
         metadata['docker']['container_id'] = docker_id unless docker_id.nil?
         container_cache_key = container_name
         if present?(@kubernetes_url)
-          pod_metadata = get_pod_metadata(cache_key, namespace_name, pod_name, create_time, batch_miss_cache)
+          pod_metadata = get_pod_metadata(cache_key, namespace_name, pod_name, create_time, batch_miss_cache,
+                                          key_is_pod_id: cache_key != docker_id)
           if (pod_metadata.include? 'containers') && (pod_metadata['containers'].include? container_cache_key) && !@skip_container_metadata # rubocop:disable Layout/LineLength
             metadata['kubernetes']['container_image'] = pod_metadata['containers'][container_cache_key]['image']
             unless pod_metadata['containers'][container_cache_key]['image_id'].empty?
