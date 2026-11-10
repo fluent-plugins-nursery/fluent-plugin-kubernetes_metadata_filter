@@ -263,6 +263,29 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    it 'tells the cache strategy whether the cache key is the pod UID' do
+      VCR.use_cassettes([{ name: 'valid_kubernetes_api_server' }, { name: 'kubernetes_get_api_v1' }]) do
+        driver = create_driver('
+          kubernetes_url https://localhost:8443
+          watch false
+          cache_size 1
+        ')
+        keys = []
+        get_pod_metadata = lambda do |key, *_args, key_is_pod_id: false|
+          keys << [key, key_is_pod_id]
+          {}
+        end
+        driver.instance.stub(:get_pod_metadata, get_pod_metadata) do
+          [VAR_LOG_CONTAINER_TAG, VAR_LOG_POD_TAG].each do |tag|
+            driver.run(default_tag: tag) { driver.feed(@time, {}) }
+          end
+        end
+
+        assert_equal([['49095a2894da899d3b327c5fde1e056a81376cc9a8f8b09a195f2a92bceed459', false],
+                      ['c76927af-f563-11e4-b32d-54ee7527188d', true]], keys)
+      end
+    end
+
     it "inability to connect to the api server handles exception and doesn't block pipeline" do
       VCR.use_cassettes([{ name: 'valid_kubernetes_api_server' }, { name: 'kubernetes_get_api_v1' }]) do
         driver = create_driver('
