@@ -135,6 +135,39 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    it 'client key of any algorithm' do
+      Dir.mktmpdir do |dir|
+        { 'rsa' => OpenSSL::PKey::RSA.generate(2048),
+          'ec' => OpenSSL::PKey::EC.generate('prime256v1'),
+          'ed25519' => OpenSSL::PKey.generate_key('ED25519') }.each do |name, key|
+          cert = OpenSSL::X509::Certificate.new
+          cert.version = 2
+          cert.serial = 1
+          cert.subject = cert.issuer = OpenSSL::X509::Name.parse("/CN=#{name}")
+          cert.public_key = key
+          cert.not_before = Time.now
+          cert.not_after = Time.now + 3600
+          cert.sign(key, name == 'ed25519' ? nil : OpenSSL::Digest.new('SHA256'))
+          cert_path = File.join(dir, "#{name}.crt")
+          key_path = File.join(dir, "#{name}.key")
+          File.write(cert_path, cert.to_pem)
+          File.write(key_path, key.private_to_pem)
+
+          VCR.use_cassette('valid_kubernetes_api_server') do
+            d = create_driver("
+              kubernetes_url https://localhost:8443
+              watch false
+              client_cert #{cert_path}
+              client_key #{key_path}
+            ")
+
+            assert_equal(key.public_to_der,
+                         d.instance.instance_variable_get(:@ssl_options)[:client_key].public_to_der)
+          end
+        end
+      end
+    end
+
     it 'service account credential files are tested for existence' do
       VCR.use_cassette('valid_kubernetes_api_server') do
         ENV['KUBERNETES_SERVICE_HOST'] = 'localhost'

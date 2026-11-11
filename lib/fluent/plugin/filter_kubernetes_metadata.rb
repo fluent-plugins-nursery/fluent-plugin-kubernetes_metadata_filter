@@ -243,7 +243,7 @@ module Fluent
         if present?(@kubernetes_url)
           @ssl_options = {
             client_cert: present?(@client_cert) ? OpenSSL::X509::Certificate.new(File.read(@client_cert)) : nil,
-            client_key: present?(@client_key) ? OpenSSL::PKey::RSA.new(File.read(@client_key)) : nil,
+            client_key: present?(@client_key) ? OpenSSL::PKey.read(File.read(@client_key)) : nil,
             ca_file: @ca_file,
             verify_ssl: @verify_ssl ? OpenSSL::SSL::VERIFY_PEER : OpenSSL::SSL::VERIFY_NONE
           }
