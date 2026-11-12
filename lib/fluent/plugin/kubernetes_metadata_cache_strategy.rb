@@ -33,6 +33,12 @@ module KubernetesMetadata
         pod_metadata = fetch_pod_metadata(namespace_name, pod_name)
         if @skip_namespace_metadata
           ids = { pod_id: pod_metadata['pod_id'] }
+          if ids[:pod_id].nil?
+            # the lookup failed: let the key stand in for the pod UID, as
+            # when the namespace is found below
+            ids[:pod_id] = key
+            ids[:pod_id_unknown] = true unless key_is_pod_id
+          end
           @id_cache[key] = ids
           return pod_metadata
         end

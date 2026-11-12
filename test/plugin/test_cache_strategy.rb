@@ -24,7 +24,7 @@ require_relative '../helper'
 class KubernetesMetadataCacheStrategyMock
   include KubernetesMetadata::CacheStrategy
 
-  attr_accessor :stats, :cache, :id_cache, :namespace_cache, :allow_orphans
+  attr_accessor :stats, :cache, :id_cache, :namespace_cache, :allow_orphans, :skip_namespace_metadata
 
   def initialize
     @stats = KubernetesMetadata::Stats.new
@@ -209,6 +209,57 @@ class TestCacheStrategy < Minitest::Spec
 
     assert_equal(2, calls)
     assert_equal({ pod_id: nil, namespace_id: @namespace_uuid }, @strategy.id_cache[@cache_key])
+  end
+
+  it 'when the first pod lookup failed and a later one succeeds with skip_namespace_metadata' do
+    @strategy.skip_namespace_metadata = true
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      @strategy.cache[@pod_uuid] = @pod_meta
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      assert_equal({}, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+      3.times do
+        assert_equal(@pod_meta, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+      end
+    end
+
+    assert_equal(2, calls)
+    assert_equal({ pod_id: @pod_uuid }, @strategy.id_cache[@cache_key])
+  end
+
+  it 'when the key is the pod UID and the first lookup failed with skip_namespace_metadata' do
+    # with /var/log/pods tags only the UID from the tag stands for the pod
+    @strategy.skip_namespace_metadata = true
+    other_meta = { 'pod_id' => 'other_pod_uuid', 'labels' => { 'meta' => 'other' } }
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      other_meta
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      3.times do
+        @strategy.get_pod_metadata(@pod_uuid, 'namespace', 'pod', @time, {}, key_is_pod_id: true)
+      end
+    end
+
+    assert_equal(3, calls)
+    assert_equal({ pod_id: @pod_uuid }, @strategy.id_cache[@pod_uuid])
+  end
+
+  it 'when the pod is found on the first lookup with skip_namespace_metadata' do
+    @strategy.skip_namespace_metadata = true
+
+    @strategy.stub(:fetch_pod_metadata, @pod_meta) do
+      assert_equal(@pod_meta, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+    end
+
+    assert_equal({ pod_id: @pod_uuid }, @strategy.id_cache[@cache_key])
   end
 
   it 'when metadata is not cached and pod is deleted and namespace is for a different namespace with the same name' do
