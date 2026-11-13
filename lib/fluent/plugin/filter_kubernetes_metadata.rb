@@ -44,7 +44,7 @@ module Fluent
       config_param :kubernetes_url, :string, default: nil
       config_param :cache_size, :integer, default: 1000
       config_param :cache_ttl, :integer, default: 60 * 60
-      config_param :ignore_nil, :integer, default: true
+      config_param :ignore_nil, :bool, default: true
       config_param :watch, :bool, default: true
       config_param :apiVersion, :string, default: 'v1'
       config_param :client_cert, :string, default: nil
