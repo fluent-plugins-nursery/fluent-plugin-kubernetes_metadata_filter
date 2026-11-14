@@ -174,6 +174,28 @@ class TestWatchNamespaces < TestWatch
     end
   end
 
+  it 'namespace watch raises Fluent::UnrecoverableError when the watch request keeps failing after listing works' do
+    # kubeclient opens the watch connection in #each, not when the watcher is created.
+    failing_watch = Object.new
+    def failing_watch.each
+      raise KubeException.new(500, 'watch request failed', nil)
+    end
+    stub(:start_namespace_watch, nil) do
+      @client.stub(:get_namespaces, @initial) do
+        @client.stub(:watch_namespaces, failing_watch) do
+          Timeout.timeout(10) do
+            assert_raises(Fluent::UnrecoverableError) do
+              set_up_namespace_thread
+            end
+          end
+          assert_equal(3, @stats[:namespace_watch_failures])
+          assert_equal(2, Thread.current[:namespace_watch_retry_count])
+          assert_equal(4, Thread.current[:namespace_watch_retry_backoff_interval])
+        end
+      end
+    end
+  end
+
   it 'namespace watch resets watch retry count when exceptions are encountered and connection to k8s API server is re-established' do # rubocop:disable Layout/LineLength
     @client.stub(:get_namespaces, @initial) do
       @client.stub(:watch_namespaces, [[@created, @exception_raised]]) do
