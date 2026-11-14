@@ -139,9 +139,9 @@ module KubernetesMetadata
       # continue watching from most recent resourceVersion
       options[:resource_version] = namespaces[:metadata][:resourceVersion]
 
-      watcher = @client.watch_namespaces(**options)
-      reset_namespace_watch_retry_stats
-      watcher
+      # The watch connection is opened later, in #each, so the retry stats
+      # are reset only once a notice is received.
+      @client.watch_namespaces(**options)
     end
 
     # Reset namespace watch retry count and backoff interval as there is a
@@ -153,10 +153,12 @@ module KubernetesMetadata
 
     # Process a watcher notice and potentially raise an exception.
     def process_namespace_watcher_notices(watcher) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
-      watcher.each do |notice| # rubocop:disable Metrics/BlockLength
+      watcher.each do |notice|
+        # A notice means the watch connection is open.
+        reset_namespace_watch_retry_stats
+
         case notice[:type]
         when 'MODIFIED'
-          reset_namespace_watch_retry_stats
           cache_key = notice[:object][:metadata][:uid]
           cached = @namespace_cache[cache_key]
           if cached
@@ -166,7 +168,6 @@ module KubernetesMetadata
             @stats.bump(:namespace_cache_watch_misses)
           end
         when 'DELETED'
-          reset_namespace_watch_retry_stats
           # ignore and let age out for cases where
           # deleted but still processing logs
           @stats.bump(:namespace_cache_watch_deletes_ignored)
@@ -180,7 +181,6 @@ module KubernetesMetadata
             raise "Error while watching namespaces: #{message}"
           end
         else
-          reset_namespace_watch_retry_stats
           # Don't pay attention to creations, since the created namespace may not
           # be used by any namespace on this node.
           @stats.bump(:namespace_cache_watch_ignored)

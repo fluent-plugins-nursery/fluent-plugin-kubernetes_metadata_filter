@@ -145,9 +145,9 @@ module KubernetesMetadata
         options[:resource_version] = pods[:metadata][:resourceVersion]
       end
 
-      watcher = @client.watch_pods(**options)
-      reset_pod_watch_retry_stats
-      watcher
+      # The watch connection is opened later, in #each, so the retry stats
+      # are reset only once a notice is received.
+      @client.watch_pods(**options)
     end
 
     # Reset pod watch retry count and backoff interval as there is a
@@ -160,6 +160,9 @@ module KubernetesMetadata
     # Process a watcher notice and potentially raise an exception.
     def process_pod_watcher_notices(watcher) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
       watcher.each do |notice| # rubocop:disable Metrics/BlockLength
+        # A notice means the watch connection is open.
+        reset_pod_watch_retry_stats
+
         # store version we processed to not reprocess it ... do not unset when there is no version in response
         version = # TODO: replace with &.dig once we are on ruby 2.5+
           notice[:object] && notice[:object][:metadata] && notice[:object][:metadata][:resourceVersion]
@@ -168,7 +171,6 @@ module KubernetesMetadata
 
         case notice[:type]
         when 'MODIFIED'
-          reset_pod_watch_retry_stats
           cache_key = notice.dig(:object, :metadata, :uid)
           cached = @cache[cache_key]
           if cached
@@ -181,7 +183,6 @@ module KubernetesMetadata
             @stats.bump(:pod_cache_watch_misses)
           end
         when 'DELETED'
-          reset_pod_watch_retry_stats
           # ignore and let age out for cases where pods
           # deleted but still processing logs
           @stats.bump(:pod_cache_watch_delete_ignored)
@@ -196,7 +197,6 @@ module KubernetesMetadata
             raise "Error while watching pods: #{message}"
           end
         else
-          reset_pod_watch_retry_stats
           # Don't pay attention to creations, since the created pod may not
           # end up on this node.
           @stats.bump(:pod_cache_watch_ignored)
