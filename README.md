@@ -63,7 +63,7 @@ when true (default: `true`)
 * `stats_interval` - The interval to display cache stats (default: 30s).  Set to 0 to disable stats collection and logging
 * `watch_retry_interval` - The time interval in seconds for retry backoffs when watch connections fail. (default: `1`)
 * `watch_retry_exponential_backoff_base` - The base of the exponential backoff between watch retries: the wait before retry `n` is `watch_retry_interval * watch_retry_exponential_backoff_base ** (n - 1)`. (default: `2`)
-* `watch_retry_max_times` - The maximum number of times to retry the pod and namespace watches; after that the filter raises an unrecoverable error so Fluentd restarts. The count resets once a watch succeeds. (default: `10`)
+* `watch_retry_max_times` - The maximum number of times to retry the pod and namespace watches; after that the filter raises an unrecoverable error and Fluentd exits. The count resets once a watch succeeds. (default: `10`)
 * `open_timeout` - The time in seconds to wait for a connection to kubernetes service. (default: `3`)
 * `read_timeout` - The time in seconds to wait for a read from kubernetes service. (default: `10`)
 * `include_ownerrefs_metadata` - If set to true, it will include metadata (`kind` & `name`) in `kubernetes.ownerrefs` about the controller that owns the pod. (default: `false`)
