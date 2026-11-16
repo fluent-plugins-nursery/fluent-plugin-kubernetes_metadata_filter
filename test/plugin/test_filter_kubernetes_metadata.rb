@@ -68,20 +68,24 @@ class TestFilterKubernetesMetadata < Minitest::Spec
         d = create_driver('ignore_nil true')
 
         assert(d.instance.ignore_nil)
-        cache = d.instance.instance_variable_get(:@cache)
-        cache.getset('pod-uid') { nil }
+        [:@id_cache, :@cache, :@namespace_cache].each do |name|
+          cache = d.instance.instance_variable_get(name)
+          cache.getset('uid') { nil }
 
-        refute(cache.key?('pod-uid'))
+          refute(cache.key?('uid'), "#{name} stored nil")
+        end
       end
 
       it 'caches nil values when false' do
         d = create_driver('ignore_nil false')
 
         refute(d.instance.ignore_nil)
-        cache = d.instance.instance_variable_get(:@cache)
-        cache.getset('pod-uid') { nil }
+        [:@id_cache, :@cache, :@namespace_cache].each do |name|
+          cache = d.instance.instance_variable_get(name)
+          cache.getset('uid') { nil }
 
-        assert(cache.key?('pod-uid'))
+          assert(cache.key?('uid'), "#{name} did not store nil")
+        end
       end
     end
 
