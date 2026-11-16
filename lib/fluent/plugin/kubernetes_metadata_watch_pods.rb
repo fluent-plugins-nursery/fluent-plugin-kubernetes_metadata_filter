@@ -202,6 +202,8 @@ module KubernetesMetadata
           @stats.bump(:pod_cache_watch_ignored)
         end
       end
+      # The watch ended without an error, so the connection worked.
+      reset_pod_watch_retry_stats
     end
   end
 end
