@@ -63,6 +63,32 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    describe 'ignore_nil' do
+      it 'keeps nil values out of the caches when true' do
+        d = create_driver('ignore_nil true')
+
+        assert(d.instance.ignore_nil)
+        [:@id_cache, :@cache, :@namespace_cache].each do |name|
+          cache = d.instance.instance_variable_get(name)
+          cache.getset('uid') { nil }
+
+          refute(cache.key?('uid'), "#{name} stored nil")
+        end
+      end
+
+      it 'caches nil values when false' do
+        d = create_driver('ignore_nil false')
+
+        refute(d.instance.ignore_nil)
+        [:@id_cache, :@cache, :@namespace_cache].each do |name|
+          cache = d.instance.instance_variable_get(name)
+          cache.getset('uid') { nil }
+
+          assert(cache.key?('uid'), "#{name} did not store nil")
+        end
+      end
+    end
+
     it 'check test_api_adapter' do
       d = create_driver('test_api_adapter KubernetesMetadata::TestApiAdapter')
 
