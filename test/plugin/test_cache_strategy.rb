@@ -231,6 +231,22 @@ class TestCacheStrategy < Minitest::Spec
     assert_equal({ pod_id: @pod_uuid }, @strategy.id_cache[@cache_key])
   end
 
+  it 'when the pod lookup keeps failing for a container ID key with skip_namespace_metadata' do
+    # a container ID is not a pod UID, so it must not end up as pod_id
+    @strategy.skip_namespace_metadata = true
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      {}
+    end
+    results = @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      Array.new(3) { @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}) }
+    end
+
+    assert_equal(3, calls)
+    results.each { |metadata| refute(metadata.key?('pod_id'), metadata.inspect) }
+  end
+
   it 'when the key is the pod UID and the first lookup failed with skip_namespace_metadata' do
     # with /var/log/pods tags only the UID from the tag stands for the pod
     @strategy.skip_namespace_metadata = true
