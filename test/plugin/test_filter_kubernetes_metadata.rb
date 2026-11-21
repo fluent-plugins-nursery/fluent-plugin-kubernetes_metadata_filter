@@ -496,6 +496,42 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    it 'with docker & kubernetes metadata for an init container' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod_with_init_container' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag('var.log.containers.fabric8-console-controller-98rqc_default_init-config-0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1.log') # rubocop:disable Layout/LineLength
+        expected_kube_metadata = {
+          'docker' => {
+            'container_id' => '0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1'
+          },
+          'kubernetes' => {
+            'host' => 'jimmi-redhat.localnet',
+            'pod_name' => 'fabric8-console-controller-98rqc',
+            'container_name' => 'init-config',
+            'container_image' => 'busybox:1.36',
+            'container_image_id' => 'docker://5f0a3b6d1e4c7f2a9b8c3d6e1f4a7b2c5d8e3f6a9b4c7d2e5f8a3b6c9d4e7f2a',
+            'namespace_name' => 'default',
+            'namespace_id' => '898268c8-4a36-11e5-9d81-42010af0194c',
+            'namespace_labels' => {
+              'tenant' => 'test'
+            },
+            'pod_id' => 'c76927af-f563-11e4-b32d-54ee7527188d',
+            'pod_ip' => '172.17.0.8',
+            'master_url' => 'https://localhost:8443',
+            'labels' => {
+              'component' => 'fabric8Console'
+            }
+          }
+        }
+
+        assert_equal(expected_kube_metadata, filtered[0])
+      end
+    end
+
     it 'kubernetes metadata is cloned so it further processing does not modify the cache' do
       VCR.use_cassettes([
                           { name: 'valid_kubernetes_api_server' },
