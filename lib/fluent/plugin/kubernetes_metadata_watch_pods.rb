@@ -146,7 +146,7 @@ module KubernetesMetadata
       end
 
       # The watch connection is opened later, in #each, so the retry stats
-      # are reset only once a notice is received.
+      # are reset in process_pod_watcher_notices instead.
       @client.watch_pods(**options)
     end
 

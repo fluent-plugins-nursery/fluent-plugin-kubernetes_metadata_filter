@@ -140,7 +140,7 @@ module KubernetesMetadata
       options[:resource_version] = namespaces[:metadata][:resourceVersion]
 
       # The watch connection is opened later, in #each, so the retry stats
-      # are reset only once a notice is received.
+      # are reset in process_namespace_watcher_notices instead.
       @client.watch_namespaces(**options)
     end
 
