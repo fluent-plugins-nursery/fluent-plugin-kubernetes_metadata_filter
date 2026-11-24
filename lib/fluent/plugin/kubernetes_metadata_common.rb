@@ -60,7 +60,8 @@ module KubernetesMetadata
       container_meta = {}
       begin
         if pod_object[:status]
-          container_statuses = pod_object[:status].values_at(:initContainerStatuses, :containerStatuses).compact.flatten
+          init_statuses = pod_object[:status][:initContainerStatuses] || []
+          container_statuses = init_statuses + (pod_object[:status][:containerStatuses] || [])
           container_statuses.each do |container_status|
             container_id = (container_status[:containerID] || '').sub(%r{^[-_a-zA-Z0-9]+://}, '')
             key = container_status[:name]
@@ -73,7 +74,8 @@ module KubernetesMetadata
                                       'name' => container_status[:name],
                                       'image' => container_status[:image],
                                       'image_id' => container_status[:imageID],
-                                      :containerID => container_id
+                                      :containerID => container_id,
+                                      :initContainer => init_statuses.include?(container_status)
                                     }
                                   end
           end

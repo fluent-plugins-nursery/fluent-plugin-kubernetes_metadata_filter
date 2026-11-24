@@ -323,7 +323,7 @@ module Fluent
       end
 
       def get_metadata_for_record(namespace_name, pod_name, container_name, cache_key, create_time, batch_miss_cache, # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity
-                                  docker_id)
+                                  docker_id, record_container_id = nil)
         metadata = {
           'docker' => { 'container_id' => '' },
           'kubernetes' => {
@@ -343,9 +343,14 @@ module Fluent
               metadata['kubernetes']['container_image_id'] =
                 pod_metadata['containers'][container_cache_key]['image_id']
             end
-            unless pod_metadata['containers'][container_cache_key]['containerID'].empty?
-              metadata['docker']['container_id'] =
-                pod_metadata['containers'][container_cache_key]['containerID']
+            container_id = pod_metadata['containers'][container_cache_key]['containerID']
+            # The status of an init container can be from a later attempt than
+            # the one that wrote the log line, so use it only when neither the
+            # tag nor the record has a container ID.
+            if !container_id.empty? &&
+               (!pod_metadata['containers'][container_cache_key]['initContainer'] ||
+                (!present?(docker_id) && !present?(record_container_id)))
+              metadata['docker']['container_id'] = container_id
             end
           end
           metadata['kubernetes'].merge!(pod_metadata) if pod_metadata
@@ -379,7 +384,8 @@ module Fluent
             cache_key,
             time,
             batch_miss_cache,
-            docker_id
+            docker_id,
+            record['docker'].respond_to?(:key?) ? record['docker']['container_id'] : nil
           )
         end
         if @lookup_from_k8s_field && record.key?('kubernetes') && record.key?('docker') &&
