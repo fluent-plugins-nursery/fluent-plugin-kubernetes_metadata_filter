@@ -25,6 +25,7 @@ class TestFilterKubernetesMetadata < Minitest::Spec
   include Fluent
 
   VAR_LOG_CONTAINER_TAG = 'var.log.containers.fabric8-console-controller-98rqc_default_fabric8-console-container-49095a2894da899d3b327c5fde1e056a81376cc9a8f8b09a195f2a92bceed459.log' # rubocop:disable Layout/LineLength
+  INIT_CONTAINER_ID = '0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1'
   VAR_LOG_POD_TAG = 'var.log.pods.default_fabric8-console-controller-98rqc_c76927af-f563-11e4-b32d-54ee7527188d.fabric8-console-container.0.log' # rubocop:disable Layout/LineLength
 
   def create_driver(conf = '')
@@ -493,6 +494,85 @@ class TestFilterKubernetesMetadata < Minitest::Spec
         }
 
         assert_equal(expected_kube_metadata, filtered[0])
+      end
+    end
+
+    it 'with docker & kubernetes metadata for an init container' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod_with_init_container' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag('var.log.containers.fabric8-console-controller-98rqc_default_init-config-0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1.log') # rubocop:disable Layout/LineLength
+        expected_kube_metadata = {
+          'docker' => {
+            'container_id' => '0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1'
+          },
+          'kubernetes' => {
+            'host' => 'jimmi-redhat.localnet',
+            'pod_name' => 'fabric8-console-controller-98rqc',
+            'container_name' => 'init-config',
+            'container_image' => 'busybox:1.36',
+            'container_image_id' => 'docker://5f0a3b6d1e4c7f2a9b8c3d6e1f4a7b2c5d8e3f6a9b4c7d2e5f8a3b6c9d4e7f2a',
+            'namespace_name' => 'default',
+            'namespace_id' => '898268c8-4a36-11e5-9d81-42010af0194c',
+            'namespace_labels' => {
+              'tenant' => 'test'
+            },
+            'pod_id' => 'c76927af-f563-11e4-b32d-54ee7527188d',
+            'pod_ip' => '172.17.0.8',
+            'master_url' => 'https://localhost:8443',
+            'labels' => {
+              'component' => 'fabric8Console'
+            }
+          }
+        }
+
+        assert_equal(expected_kube_metadata, filtered[0])
+      end
+    end
+
+    it 'keeps the container ID from the tag for a restarted init container' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod_with_restarted_init_container' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag('var.log.containers.fabric8-console-controller-98rqc_default_init-config-0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1.log') # rubocop:disable Layout/LineLength
+
+        assert_equal(INIT_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('busybox:1.36', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'keeps the container ID from the record for a restarted init container' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod_with_restarted_init_container' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag('var.log.pods.default_fabric8-console-controller-98rqc_c76927af-f563-11e4-b32d-54ee7527188d.init-config.0.log', # rubocop:disable Layout/LineLength
+                                 { 'docker' => { 'container_id' => INIT_CONTAINER_ID } })
+
+        assert_equal(INIT_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('busybox:1.36', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'uses the container ID from the pod status for an init container with a /var/log/pods tag' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod_with_init_container' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag('var.log.pods.default_fabric8-console-controller-98rqc_c76927af-f563-11e4-b32d-54ee7527188d.init-config.0.log') # rubocop:disable Layout/LineLength
+
+        assert_equal(INIT_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('busybox:1.36', filtered[0]['kubernetes']['container_image'])
       end
     end
 

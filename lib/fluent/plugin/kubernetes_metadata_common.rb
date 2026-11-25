@@ -59,8 +59,10 @@ module KubernetesMetadata
       # collect container information
       container_meta = {}
       begin
-        if pod_object[:status] && pod_object[:status][:containerStatuses]
-          pod_object[:status][:containerStatuses].each do |container_status|
+        if pod_object[:status]
+          init_statuses = (pod_object[:status][:initContainerStatuses] || []).map { |status| [status, true] }
+          regular_statuses = (pod_object[:status][:containerStatuses] || []).map { |status| [status, false] }
+          (init_statuses + regular_statuses).each do |container_status, init_container|
             container_id = (container_status[:containerID] || '').sub(%r{^[-_a-zA-Z0-9]+://}, '')
             key = container_status[:name]
             container_meta[key] = if @skip_container_metadata
@@ -72,7 +74,8 @@ module KubernetesMetadata
                                       'name' => container_status[:name],
                                       'image' => container_status[:image],
                                       'image_id' => container_status[:imageID],
-                                      :containerID => container_id
+                                      :containerID => container_id,
+                                      :initContainer => init_container
                                     }
                                   end
           end
