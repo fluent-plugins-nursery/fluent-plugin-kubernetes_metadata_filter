@@ -344,12 +344,10 @@ module Fluent
                 pod_metadata['containers'][container_cache_key]['image_id']
             end
             container_id = pod_metadata['containers'][container_cache_key]['containerID']
-            # The status of an init container can be from a later attempt than
-            # the one that wrote the log line, so use it only when neither the
-            # tag nor the record has a container ID.
-            if !container_id.empty? &&
-               (!pod_metadata['containers'][container_cache_key]['initContainer'] ||
-                (!present?(docker_id) && !present?(record_container_id)))
+            # The pod status can be from another attempt than the one that wrote
+            # the log line, so use it only when neither the tag nor the record
+            # has a container ID.
+            if !container_id.empty? && !present?(docker_id) && !present?(record_container_id)
               metadata['docker']['container_id'] = container_id
             end
           end

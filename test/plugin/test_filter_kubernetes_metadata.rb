@@ -26,6 +26,7 @@ class TestFilterKubernetesMetadata < Minitest::Spec
 
   VAR_LOG_CONTAINER_TAG = 'var.log.containers.fabric8-console-controller-98rqc_default_fabric8-console-container-49095a2894da899d3b327c5fde1e056a81376cc9a8f8b09a195f2a92bceed459.log' # rubocop:disable Layout/LineLength
   INIT_CONTAINER_ID = '0b2a1f4c2c9e41d4a5f8c7f3e6d9b8a7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1'
+  PRIOR_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
   VAR_LOG_POD_TAG = 'var.log.pods.default_fabric8-console-controller-98rqc_c76927af-f563-11e4-b32d-54ee7527188d.fabric8-console-container.0.log' # rubocop:disable Layout/LineLength
 
   def create_driver(conf = '')
@@ -573,6 +574,102 @@ class TestFilterKubernetesMetadata < Minitest::Spec
 
         assert_equal(INIT_CONTAINER_ID, filtered[0]['docker']['container_id'])
         assert_equal('busybox:1.36', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'keeps the container ID from the tag for a restarted container' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        tag = "var.log.containers.fabric8-console-controller-98rqc_default_fabric8-console-container-#{PRIOR_CONTAINER_ID}.log" # rubocop:disable Layout/LineLength
+        filtered = emit_with_tag(tag)
+
+        assert_equal(PRIOR_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'keeps the container ID from the record when lookup_from_k8s_field is enabled' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        record = {
+          'docker' => { 'container_id' => PRIOR_CONTAINER_ID },
+          'kubernetes' => {
+            'namespace_name' => 'default',
+            'pod_name' => 'fabric8-console-controller-98rqc',
+            'container_name' => 'fabric8-console-container'
+          }
+        }
+        filtered = emit_with_tag('non-kubernetes', record)
+
+        assert_equal(PRIOR_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'keeps the container ID from the record for a restarted container with a /var/log/pods tag' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag(VAR_LOG_POD_TAG, { 'docker' => { 'container_id' => PRIOR_CONTAINER_ID } })
+
+        assert_equal(PRIOR_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'keeps the container ID from the record with a /var/log/pods tag when lookup_from_k8s_field is disabled' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        record = {
+          'docker' => { 'container_id' => PRIOR_CONTAINER_ID },
+          'kubernetes' => {
+            'namespace_name' => 'default',
+            'pod_name' => 'fabric8-console-controller-98rqc',
+            'container_name' => 'fabric8-console-container'
+          }
+        }
+        config = '
+          kubernetes_url https://localhost:8443
+          watch false
+          cache_size 1
+          lookup_from_k8s_field false
+        '
+        filtered = emit_with_tag(VAR_LOG_POD_TAG, record, config)
+
+        assert_equal(PRIOR_CONTAINER_ID, filtered[0]['docker']['container_id'])
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
+    it 'uses the container ID from the pod status for a container with a /var/log/pods tag and no record ID' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        filtered = emit_with_tag(VAR_LOG_POD_TAG)
+
+        assert_equal(
+          '49095a2894da899d3b327c5fde1e056a81376cc9a8f8b09a195f2a92bceed459',
+          filtered[0]['docker']['container_id']
+        )
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
       end
     end
 
