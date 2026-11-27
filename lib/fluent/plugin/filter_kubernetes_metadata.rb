@@ -359,9 +359,7 @@ module Fluent
             kube[k.dup] = v.dup
           end
         end
-        if metadata['docker'] && (metadata['docker']['container_id'].nil? || metadata['docker']['container_id'].empty?)
-          metadata.delete('docker')
-        end
+        metadata.delete('docker') if metadata['docker'] && !present?(metadata['docker']['container_id'])
         metadata
       end
 

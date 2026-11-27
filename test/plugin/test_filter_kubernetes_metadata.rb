@@ -673,6 +673,28 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    it 'keeps a record whose container ID is a number' do
+      VCR.use_cassettes([
+                          { name: 'valid_kubernetes_api_server' },
+                          { name: 'kubernetes_get_api_v1' },
+                          { name: 'kubernetes_get_pod' },
+                          { name: 'kubernetes_get_namespace_default' }
+                        ]) do
+        record = {
+          'docker' => { 'container_id' => 123 },
+          'kubernetes' => {
+            'namespace_name' => 'default',
+            'pod_name' => 'fabric8-console-controller-98rqc',
+            'container_name' => 'fabric8-console-container'
+          }
+        }
+        filtered = emit_with_tag('non-kubernetes', record)
+
+        assert_equal(1, filtered.size)
+        assert_equal('fabric8/hawtio-kubernetes:latest', filtered[0]['kubernetes']['container_image'])
+      end
+    end
+
     it 'kubernetes metadata is cloned so it further processing does not modify the cache' do
       VCR.use_cassettes([
                           { name: 'valid_kubernetes_api_server' },
