@@ -91,6 +91,12 @@ class TestFilterKubernetesMetadata < Minitest::Spec
       end
     end
 
+    it 'rejects a negative pod_lookup_retry_interval' do
+      assert_raises(Fluent::ConfigError) do
+        create_driver('pod_lookup_retry_interval -1')
+      end
+    end
+
     it 'check test_api_adapter' do
       d = create_driver('test_api_adapter KubernetesMetadata::TestApiAdapter')
 
@@ -378,6 +384,63 @@ class TestFilterKubernetesMetadata < Minitest::Spec
         }
 
         assert_equal(expected_kube_metadata, filtered[0])
+      end
+    end
+
+    describe 'when the pod is not found' do
+      let(:pod_url) { %r{\Ahttps://localhost:8443/api/v1/namespaces/default/pods/fabric8-console-controller-98rqc} }
+
+      def run_with_missing_pod(config)
+        VCR.use_cassettes([{ name: 'valid_kubernetes_api_server' }, { name: 'kubernetes_get_api_v1' }]) do
+          driver = create_driver("kubernetes_url https://localhost:8443\nwatch false\n#{config}")
+          stub_request(:get, pod_url).to_return(
+            status: 404,
+            body: { kind: 'Status', apiVersion: 'v1', status: 'Failure', reason: 'NotFound', code: 404 }.to_json
+          )
+          stub_request(:get, %r{\Ahttps://localhost:8443/api/v1/namespaces/default(\?|\z)}).to_return(
+            body: {
+              kind: 'Namespace', apiVersion: 'v1',
+              metadata: { name: 'default', uid: 'ns-uid', creationTimestamp: '2015-01-01T00:00:00Z' }
+            }.to_json
+          )
+          driver.run(default_tag: VAR_LOG_CONTAINER_TAG) { yield driver }
+        end
+      end
+
+      it 'looks it up once within pod_lookup_retry_interval' do
+        run_with_missing_pod('') { |d| 3.times { d.feed(@time, {}) } }
+
+        assert_requested(:get, pod_url, times: 1)
+      end
+
+      it 'looks it up for every record when pod_lookup_retry_interval is 0' do
+        run_with_missing_pod('pod_lookup_retry_interval 0') { |d| 3.times { d.feed(@time, {}) } }
+
+        assert_requested(:get, pod_url, times: 3)
+      end
+
+      it 'looks it up again after the clock steps back when pod_lookup_retry_interval is 0' do
+        now = Time.now
+        run_with_missing_pod('pod_lookup_retry_interval 0') do |d|
+          Time.stub(:now, now) { d.feed(@time, {}) }
+          Time.stub(:now, now - 300) { d.feed(@time, {}) }
+        end
+
+        assert_requested(:get, pod_url, times: 2)
+      end
+
+      it 'waits for the interval on the monotonic clock when the wall clock steps back' do
+        now = Time.now
+        clock = Fluent::Clock.now
+        run_with_missing_pod('pod_lookup_retry_interval 1') do |d|
+          Fluent::Clock.freeze(clock) { Time.stub(:now, now) { d.feed(@time, {}) } }
+          Fluent::Clock.freeze(clock + 0.5) { Time.stub(:now, now - 300) { d.feed(@time, {}) } }
+
+          assert_requested(:get, pod_url, times: 1)
+          Fluent::Clock.freeze(clock + 2) { Time.stub(:now, now - 300) { d.feed(@time, {}) } }
+        end
+
+        assert_requested(:get, pod_url, times: 2)
       end
     end
 

@@ -19,6 +19,8 @@
 # limitations under the License.
 #
 
+require 'fluent/clock'
+
 module KubernetesMetadata
   module CacheStrategy
     def get_pod_metadata(key, namespace_name, pod_name, time, batch_miss_cache, key_is_pod_id: false) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/ParameterLists, Metrics/PerceivedComplexity
@@ -30,7 +32,7 @@ module KubernetesMetadata
           return batch_miss_cache["#{namespace_name}_#{pod_name}"]
         end
 
-        pod_metadata = fetch_pod_metadata(namespace_name, pod_name)
+        pod_metadata = fetch_pod_metadata_unless_failed(key, namespace_name, pod_name)
         if @skip_namespace_metadata
           ids = { pod_id: pod_metadata['pod_id'] }
           if ids[:pod_id].nil?
@@ -92,7 +94,7 @@ module KubernetesMetadata
         # SLOW PATH
         metadata = @cache.fetch(ids[:pod_id]) do
           @stats.bump(:pod_cache_miss)
-          m = fetch_pod_metadata(namespace_name, pod_name)
+          m = fetch_pod_metadata_unless_failed(key, namespace_name, pod_name)
           m.nil? || m.empty? ? { 'pod_id' => ids[:pod_id] } : m
         end
         if ids[:pod_id_unknown] && metadata['pod_id'] && metadata['pod_id'] != ids[:pod_id]
@@ -113,6 +115,62 @@ module KubernetesMetadata
       # remove namespace info that is only used for comparison
       metadata.delete('creation_timestamp')
       metadata.delete_if { |_k, v| v.nil? }
+    end
+
+    private
+
+    # The key is the one of the log, not the pod name, so a new pod with the
+    # same name is not held back by a failure for the old one.
+    def fetch_pod_metadata_unless_failed(key, namespace_name, pod_name)
+      return fetch_pod_metadata(namespace_name, pod_name) unless remember_failed_lookup?(key)
+
+      return {} if @failed_pod_lookups.include?(key)
+
+      metadata = fetch_pod_metadata(namespace_name, pod_name)
+      @failed_pod_lookups.add(key) if metadata.nil? || metadata.empty?
+      metadata
+    end
+
+    # Logs of different pods can share a key that is not a string or is blank.
+    # String#b keeps strip from raising on an invalid byte sequence.
+    def remember_failed_lookup?(key)
+      @failed_pod_lookups && key.is_a?(String) && !key.b.strip.empty?
+    end
+  end
+
+  # Remembers the keys whose pod lookup failed until the retry interval passes.
+  # The keys stay in the order they failed, so the oldest ones expire and are
+  # evicted first. Fluent::Clock is monotonic, so a wall clock step does not
+  # change the wait.
+  class FailedLookups
+    def initialize(max_size, interval)
+      @max_size = max_size
+      @interval = interval
+      @retry_at = {}
+      @lock = Mutex.new
+    end
+
+    def include?(key)
+      @lock.synchronize do
+        evict_expired
+        @retry_at.key?(key)
+      end
+    end
+
+    def add(key)
+      @lock.synchronize do
+        @retry_at.delete(key)
+        @retry_at[key] = Fluent::Clock.now + @interval
+        evict_expired
+        @retry_at.shift while @retry_at.size > @max_size
+      end
+    end
+
+    private
+
+    def evict_expired
+      now = Fluent::Clock.now
+      @retry_at.shift while !@retry_at.empty? && @retry_at.first[1] <= now
     end
   end
 end

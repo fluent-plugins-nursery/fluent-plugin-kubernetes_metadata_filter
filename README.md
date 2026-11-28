@@ -43,6 +43,7 @@ Configuration options for fluent.conf are:
 This must use named capture groups for `container_name`, `pod_name`, `namespace`, and either `pod_uuid (/var/log/pods)` or `docker_id (/var/log/containers)`
 * `cache_size` - size of the cache of Kubernetes metadata to reduce requests to the API server (default: `1000`)
 * `cache_ttl` - TTL in seconds of each cached element. Set to negative value to disable TTL eviction (default: `3600` - 1 hour)
+* `pod_lookup_retry_interval` - The time in seconds to wait before looking up a pod again after its lookup failed, for example because the pod was deleted. Until then, records with the same container ID or pod UID are processed as if the pod was not found. Set to `0` to look up the pod for every record. (default: `10`)
 * `ignore_nil` - ignore caching if the value is null (default: `true`)
 * `watch` - set up a watch on pods on the API server for updates to metadata (default: `true`)
 * `annotation_match` - Array of regular expressions matching annotation field names. Matched annotations are added to a log record.
