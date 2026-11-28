@@ -24,7 +24,8 @@ require_relative '../helper'
 class KubernetesMetadataCacheStrategyMock
   include KubernetesMetadata::CacheStrategy
 
-  attr_accessor :stats, :cache, :id_cache, :namespace_cache, :allow_orphans, :skip_namespace_metadata
+  attr_accessor :stats, :cache, :id_cache, :namespace_cache, :failed_pod_lookups, :allow_orphans,
+                :skip_namespace_metadata
 
   def initialize
     @stats = KubernetesMetadata::Stats.new
@@ -266,6 +267,171 @@ class TestCacheStrategy < Minitest::Spec
 
     assert_equal(3, calls)
     assert_equal({ pod_id: @pod_uuid }, @strategy.id_cache[@pod_uuid])
+  end
+
+  it 'when the pod lookup keeps failing within the retry interval' do
+    # the remaining lines of a deleted pod's log must not call the API one by one
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    calls = 0
+    found = false
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} unless found
+
+      @strategy.cache[@pod_uuid] = @pod_meta
+    end
+    exp = @pod_meta.merge(@namespace_meta)
+    exp.delete('creation_timestamp')
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, @namespace_meta) do
+        3.times do
+          assert_equal({ 'pod_id' => @cache_key, 'namespace_id' => @namespace_uuid },
+                       @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+        end
+
+        assert_equal(1, calls)
+        found = true
+
+        Fluent::Clock.freeze(Fluent::Clock.now + 11) do
+          assert_equal(exp, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+        end
+      end
+    end
+
+    assert_equal(2, calls)
+  end
+
+  it 'when the pod lookup keeps failing within the retry interval with skip_namespace_metadata' do
+    @strategy.skip_namespace_metadata = true
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      {}
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      3.times do
+        assert_equal({}, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+      end
+    end
+
+    assert_equal(1, calls)
+  end
+
+  it 'when neither the pod nor the namespace is found within the retry interval' do
+    # nothing goes to the id cache, so each record takes the first lookup path
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      {}
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, {}) do
+        3.times do
+          assert_empty(@strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+        end
+      end
+    end
+
+    assert_equal(1, calls)
+  end
+
+  it 'when the pod lookup failed for another container of a pod with the same name' do
+    # a recreated StatefulSet pod keeps the name of the old pod
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    exp = @pod_meta.merge(@namespace_meta)
+    exp.delete('creation_timestamp')
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      next {} if calls == 1
+
+      @strategy.cache[@pod_uuid] = @pod_meta
+    end
+    @strategy.namespace_cache[@namespace_uuid] = @namespace_meta
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, @namespace_meta) do
+        @strategy.get_pod_metadata('old_container_id', 'namespace', 'pod', @time, {})
+
+        assert_equal(exp, @strategy.get_pod_metadata(@cache_key, 'namespace', 'pod', @time, {}))
+      end
+    end
+
+    assert_equal(2, calls)
+  end
+
+  it 'when the pod lookup fails for a key that is not a string or is blank' do
+    # docker.container_id or the pod UID in a tag can be nil or empty for
+    # logs of different pods
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      {}
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, {}) do
+        [nil, '', ' ', false, true, 0].each do |key|
+          2.times { @strategy.get_pod_metadata(key, 'namespace', 'pod', @time, {}) }
+        end
+      end
+    end
+
+    assert_equal(12, calls)
+  end
+
+  it 'when the pod lookup fails for a key with an invalid byte sequence' do
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(100, 10)
+    calls = 0
+    fetch_pod = lambda do |_namespace_name, _pod_name|
+      calls += 1
+      {}
+    end
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, {}) do
+        2.times { @strategy.get_pod_metadata((+"\xFF").force_encoding('UTF-8'), 'namespace', 'pod', @time, {}) }
+      end
+    end
+
+    assert_equal(1, calls)
+  end
+
+  it 'when a failure is read just before its time and another one fails after it' do
+    # the expired failure goes first, not the one that is still waiting
+    @strategy.failed_pod_lookups = KubernetesMetadata::FailedLookups.new(2, 10)
+    calls = []
+    fetch_pod = lambda do |_namespace_name, pod_name|
+      calls << pod_name
+      pod_name == 'a' && calls.size > 3 ? { 'pod_id' => 'pod-a' } : {}
+    end
+    clock = Fluent::Clock.now
+    @strategy.stub(:fetch_pod_metadata, fetch_pod) do
+      @strategy.stub(:fetch_namespace_metadata, {}) do
+        [[0, 'a'], [4, 'b'], [9, 'a'], [11, 'c'], [12, 'b'], [13, 'a'], [14, 'c'], [15, 'b']].each do |sec, key|
+          Fluent::Clock.freeze(clock + sec) { @strategy.get_pod_metadata(key, 'namespace', key, @time, {}) }
+        end
+      end
+    end
+
+    assert_equal(['a', 'b', 'c', 'a', 'b'], calls)
+  end
+
+  it 'evicts the oldest failure when every entry is still waiting' do
+    failures = KubernetesMetadata::FailedLookups.new(2, 10)
+    Fluent::Clock.freeze do
+      failures.add('a')
+      failures.add('b')
+
+      assert_includes(failures, 'a')
+
+      failures.add('c')
+
+      refute_includes(failures, 'a')
+      assert_includes(failures, 'b')
+      assert_includes(failures, 'c')
+    end
   end
 
   it 'when the pod is found on the first lookup with skip_namespace_metadata' do

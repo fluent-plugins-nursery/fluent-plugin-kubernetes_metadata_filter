@@ -44,6 +44,7 @@ module Fluent
       config_param :kubernetes_url, :string, default: nil
       config_param :cache_size, :integer, default: 1000
       config_param :cache_ttl, :integer, default: 60 * 60
+      config_param :pod_lookup_retry_interval, :integer, default: 10
       config_param :ignore_nil, :bool, default: true
       config_param :watch, :bool, default: true
       config_param :apiVersion, :string, default: 'v1'
@@ -193,6 +194,7 @@ module Fluent
           log.info 'Setting the cache TTL to :none because it was <= 0'
           @cache_ttl = :none
         end
+        raise Fluent::ConfigError, 'pod_lookup_retry_interval must be 0 or greater' if @pod_lookup_retry_interval < 0
 
         # Caches pod/namespace UID tuples for a given container UID.
         @id_cache = LruRedux::TTL::ThreadSafeCache.new(@cache_size, @cache_ttl, @ignore_nil)
@@ -202,6 +204,11 @@ module Fluent
 
         # Use the namespace UID as the key to fetch a hash containing namespace metadata
         @namespace_cache = LruRedux::TTL::ThreadSafeCache.new(@cache_size, @cache_ttl, @ignore_nil)
+
+        # Remembers the container ID or pod UID whose pod lookup failed
+        if @pod_lookup_retry_interval > 0
+          @failed_pod_lookups = KubernetesMetadata::FailedLookups.new(@cache_size, @pod_lookup_retry_interval)
+        end
 
         @tag_to_kubernetes_name_regexp_compiled = Regexp.compile(@tag_to_kubernetes_name_regexp)
 
